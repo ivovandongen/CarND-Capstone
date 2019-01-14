@@ -31,5 +31,5 @@ The important thing to remember is that the traffic lights used in the real test
 - Using the BAG file, we can use the simulator to “replay” our performance. This way we will get excellent feedback loop and can fix potential bugs until it works.
 
 ### Example of Test Track traffic light
-![Test Track Traffic Light](/imggs/test_track_trafficlight.png)
+![Test Track Traffic Light](/imgs/test_track_trafficlight.png)
 
