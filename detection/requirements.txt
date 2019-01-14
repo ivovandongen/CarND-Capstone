@@ -1,0 +1,10 @@
+tensorflow-gpu==1.3.0
+pillow
+protobuf
+Cython
+contextlib2
+lxml
+jupyter
+matplotlib
+pyyaml
+opencv-python
