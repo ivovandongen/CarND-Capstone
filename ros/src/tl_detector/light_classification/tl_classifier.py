@@ -7,9 +7,10 @@ import tensorflow as tf
 class TLClassifier(object):
 
     def __init__(self, model_file):
-        rospy.loginfo("Loading model file: {}", model_file)
-        self.session = tf.Session()
+        rospy.loginfo("Loading model file: %s", model_file)
         self.detection_graph = self.load_graph(model_file)
+        self.session = tf.Session(graph=self.detection_graph)
+        rospy.loginfo("Model loaded")git
         pass
 
     def load_graph(self, model_file):
@@ -38,6 +39,8 @@ class TLClassifier(object):
 
         print("Starting detection")
         detection_graph = self.detection_graph
+        # with detection_graph.as_default():
+        #     with tf.Session(graph=detection_graph) as sess:
         # Definite input and output Tensors for detection_graph
         image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
 
