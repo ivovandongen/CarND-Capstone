@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<launch>
+    <include file = "$(find tl_detector)/launch/tl_detector.launch" />
+    <test pkg="tl_detector" type="test/test_tl_detector.py" test-name="test_tl_detector"/>
+</launch>
