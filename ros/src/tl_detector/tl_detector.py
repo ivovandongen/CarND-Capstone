@@ -11,8 +11,10 @@ import tf
 import cv2
 import yaml
 from scipy.spatial import KDTree
+import time
 
 STATE_COUNT_THRESHOLD = 3
+INTERVAL_THRESHOLD_MS = 150
 
 
 class TLDetector(object):
@@ -25,6 +27,7 @@ class TLDetector(object):
         self.waypoint_tree = None
         self.camera_image = None
         self.lights = []
+        self.last_processed_time = -1
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -81,11 +84,12 @@ class TLDetector(object):
 
         """
 
-        # if self.image_ctr < 3:
-        #     self.image_ctr += 1
-        #     return
-        # else:
-        #     self.image_ctr = 0
+        time_start = time.time()
+        if self.last_processed_time > 0 and (time_start - self.last_processed_time) * 1000 < INTERVAL_THRESHOLD_MS:
+            rospy.loginfo("Skipping frame")
+            return
+
+        self.last_processed_time = time_start
 
         rospy.loginfo('Processing image. State %s, last %s, count %s', self.state, self.last_state, self.state_count)
 
