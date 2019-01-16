@@ -2,6 +2,13 @@ This is the project repo for the final project of the Udacity Self-Driving Car N
 
 Please use **one** of the two installation options, either native **or** docker installation.
 
+## Getting started
+
+-  Install the needed tensorflow models in the tl_detector module
+    `ros/src/tl_detector/sim_model.pb` and `ros/src/tl_detector/carla_model.pb`
+- Alternatively start using the launch configuration that doesn't use detection
+    `cd ros && roslaunch launch/styx-no-tf.launch`
+
 ### Native Installation
 https://www.jetbrains.com/help/clion/attaching-to-local-process.html
 
