@@ -12,6 +12,7 @@ import cv2
 import yaml
 from scipy.spatial import KDTree
 import time
+import os
 
 STATE_COUNT_THRESHOLD = 3
 INTERVAL_THRESHOLD_MS = 150
@@ -48,10 +49,14 @@ class TLDetector(object):
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
 
         model_file = rospy.get_param("/traffic_light_model")
-        rospy.loginfo("Using tl model: %s", model_file)
+        if model_file is None or model_file == "" or not os.path.exists(model_file):
+            rospy.loginfo("Can't use tl model: %s", model_file)
+            self.light_classifier = None
+        else:
+            rospy.loginfo("Using tl model: %s", model_file)
+            self.light_classifier = TLClassifier(model_file)
 
         self.bridge = CvBridge()
-        self.light_classifier = TLClassifier(model_file)
         self.listener = tf.TransformListener()
 
         self.state = TrafficLight.UNKNOWN
@@ -139,10 +144,11 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        # TODO
-        # return light.state
+        if self.light_classifier is None:
+            # Just return the state from the light
+            return light.state
 
-        if (not self.has_image):
+        if not self.has_image:
             self.prev_light_loc = None
             return False
 
