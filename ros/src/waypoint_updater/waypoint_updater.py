@@ -24,7 +24,7 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 75  # was: 200 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 100  # was: 200 # Number of waypoints we will publish. You can change this number
 MAX_DECEL = .5
 
 class WaypointUpdater(object):
@@ -49,6 +49,7 @@ class WaypointUpdater(object):
         self.prev_pose_x = None
         self.prev_pose_y = None
         self.prev_lane = None
+        self.prev_stopline_wp_idx = None
 
         self.loop()
 
@@ -85,28 +86,34 @@ class WaypointUpdater(object):
 
     def generate_lane(self):
         lane = Lane()
-
+        
+        light_changed = True
+        if self.prev_stopline_wp_idx is not None:
+            light_changed = self.prev_stopline_wp_idx != self.stopline_wp_idx
+                
         eps = 1E-4 # position precision is up to 2 digits after comma   
-	# part of optimization. no need to recalculate waypoints if position didn't change
+        # part of optimization. no need to recalculate waypoints if position didn't change
         if self.prev_pose_x is not None and self.prev_pose_y is not None:
-                if np.fabs(self.prev_pose_x - self.pose.pose.position.x) < eps and np.fabs(self.prev_pose_y - self.pose.pose.position.y) < eps:
-                        # rospy.logerr("this s*** happens often")
-                        return self.prev_lane 
-
+                if np.fabs(self.prev_pose_x - self.pose.pose.position.x) < eps and np.fabs(self.prev_pose_y - self.pose.pose.position.y) < eps and not light_changed:
+                    # rospy.logerr("using previous waypoints"):
+                    return self.prev_lane 
+                    
         closest_idx = self.get_closest_waypoint_idx()
         farthest_idx = closest_idx + LOOKAHEAD_WPS
         base_waypoints = self.base_waypoints.waypoints[closest_idx:farthest_idx]
-
+        
         if self.stopline_wp_idx == -1 or self.stopline_wp_idx >= farthest_idx:
             lane.waypoints = base_waypoints
         else:
+            rospy.logerr("I'm in this hell")
             lane.waypoints = self.decelerate_waypoints(base_waypoints, closest_idx)
 
         lane.header = self.base_waypoints.header
         self.prev_lane = lane
         self.prev_pose_x = self.pose.pose.position.x
         self.prev_pose_y = self.pose.pose.position.y
-
+        self.prev_stopline_wp_idx = self.stopline_wp_idx
+        
         return lane
 
     def decelerate_waypoints(self, waypoints, closest_idx):
