@@ -31,6 +31,8 @@ roslaunch launch/site.launch
 To run the GUI visualizer, run this command
 ```rviz``` 
 
+When rviz is running, go to File -> Import Config and havigate to /home/workspace and select the .rviz file we were all provided
+
 ### Some other clarifications
 
 When we start the simulator, there are 2 options: the “highway” and the real test track. The real test track is basically a copy of Udacity’s test track, which in reality is really a small parking lot (nothing fancy).
