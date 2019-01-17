@@ -12,6 +12,16 @@
 ### How To Differentiate between site & simulation
 - The self.config dictionary found in the TLDetector class of tl_detector.py contains an is_site boolean. You can use this boolean to load a different classification model depending on the context.
 
+### Instructions for using rosbag
+Real world testing instructions for download link (in the main README.md)
+```unzip traffic_light_bag_file.zip```
+```rosbag play -l traffic_light_bag_file/traffic_light_training.bag```
+Now launch the project in site mode
+```cd CarND-Capstone/ros
+roslaunch launch/site.launch
+```
+To run the GUI visualizer, run this command
+```rviz``` 
 
 ### Some other clarifications
 
