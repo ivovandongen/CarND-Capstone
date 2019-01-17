@@ -24,7 +24,8 @@ rosbag play -l traffic_light_bag_file/traffic_light_training.bag
 
 Now launch the project in site mode
 
-```cd CarND-Capstone/ros
+```
+cd CarND-Capstone/ros
 roslaunch launch/site.launch
 ```
 To run the GUI visualizer, run this command
