@@ -14,9 +14,16 @@
 
 ### Instructions for using rosbag
 Real world testing instructions for download link (in the main README.md)
-```unzip traffic_light_bag_file.zip```
-```rosbag play -l traffic_light_bag_file/traffic_light_training.bag```
+
+```
+unzip traffic_light_bag_file.zip
+```
+```
+rosbag play -l traffic_light_bag_file/traffic_light_training.bag
+```
+
 Now launch the project in site mode
+
 ```cd CarND-Capstone/ros
 roslaunch launch/site.launch
 ```
