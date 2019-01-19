@@ -15,8 +15,9 @@ import time
 import os
 
 STATE_COUNT_THRESHOLD = 3
-INTERVAL_THRESHOLD_MS = 250
-
+INTERVAL_THRESHOLD_MS_IMAGE = 300
+INTERVAL_THRESHOLD_MS_POSE = 10
+INTERVAL_THRESHOLD_MS_TRAFFIC = 300
 
 class TLDetector(object):
     def __init__(self):
@@ -29,6 +30,8 @@ class TLDetector(object):
         self.camera_image = None
         self.lights = []
         self.last_processed_time = -1
+        self.last_processed_time_pose = -1
+        self.last_processed_time_traffic = -1
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -42,6 +45,7 @@ class TLDetector(object):
         '''
         sub3 = rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_cb)
         sub6 = rospy.Subscriber('/image_color', Image, self.image_cb, queue_size=1)
+        sub7 = rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb)        #########
 
         config_string = rospy.get_param("/traffic_light_config")
         self.config = yaml.load(config_string)
@@ -67,17 +71,55 @@ class TLDetector(object):
 
         rospy.spin()
 
+
+    def final_waypoints_cb(self, final_waypoints):
+# test 1: Can we detect a deviation from waypints: --> NO. The simulator knows more than it wants to reveal on ros nodes ...:(    
+#        deviation = ((final_waypoints.waypoints[0].pose.pose.position.x - self.pose.pose.position.x)**2 + (final_waypoints.waypoints[0].pose.pose.position.y - self.pose.pose.position.y)**2)**.5
+#        rospy.loginfo(deviation)
+# test 2: Can we go for a full stop from tme to time? Lag seems to add up.
+# Adding a function in waypoint_updater did not help (self.stop_counter)
+
+        return
+
+
     def pose_cb(self, msg):
+        time_start_pose = time.time()
+        if self.last_processed_time_pose > 0 and (time_start_pose - self.last_processed_time_pose) * 1000 < INTERVAL_THRESHOLD_MS_POSE:
+#            rospy.loginfo("Skipping pose msg tl_detector")
+            return
+
+        self.last_processed_time_pose = time_start_pose
         self.pose = msg
 
     def waypoints_cb(self, waypoints):
-        self.waypoints = waypoints
+#        rospy.loginfo(self.pose.pose.position.x)
+# y-position        rospy.loginfo(self.pose.pose.position.x)
+        self.waypoints = waypoints       
+#        rospy.loginfo("Waypoint 0 x")
+#        rospy.loginfo(self.waypoints.waypoints[0].pose.pose.position.x)
+#        rospy.loginfo("Waypoint 0 y")
+#        rospy.loginfo(self.waypoints.waypoints[0].pose.pose.position.x)
+#        rospy.loginfo("Waypoint 1")
+#        rospy.loginfo(self.waypoints.waypoints[1].pose.pose.position.x)
+#        rospy.loginfo("Waypoint 24")
+#        rospy.loginfo(self.waypoints.waypoints[24].pose.pose.position.x)
+#        rospy.loginfo("Waypoint 25")
+#        rospy.loginfo(self.waypoints.waypoints[25].pose.pose.position.x)
+#        rospy.loginfo("Waypoint 1000")
+#        rospy.loginfo(self.waypoints.waypoints[1000].pose.pose.position.x)
         if not self.waypoints_2d:
             self.waypoints_2d = [[waypoint.pose.pose.position.x, waypoint.pose.pose.position.y] for waypoint in
                                  waypoints.waypoints]
             self.waypoint_tree = KDTree(self.waypoints_2d)
 
+
     def traffic_cb(self, msg):
+        time_start_traffic = time.time()
+        if self.last_processed_time_traffic > 0 and (time_start_traffic - self.last_processed_time_traffic) * 1000 < INTERVAL_THRESHOLD_MS_TRAFFIC:
+#            rospy.loginfo("Skipping traffic msg tl_detector")
+            return
+
+        self.last_processed_time_traffic = time_start_traffic
         self.lights = msg.lights
 
     def image_cb(self, msg):
@@ -87,9 +129,13 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
         """
 
+        if self.process_traffic_lights()[0] < 0:
+#            rospy.loginfo("No traffic light around")
+            return
+        
         time_start = time.time()
-        if self.last_processed_time > 0 and (time_start - self.last_processed_time) * 1000 < INTERVAL_THRESHOLD_MS:
-            rospy.loginfo("Skipping frame")
+        if self.last_processed_time > 0 and (time_start - self.last_processed_time) * 1000 < INTERVAL_THRESHOLD_MS_IMAGE:
+#            rospy.loginfo("Skipping frame")
             return
 
         self.last_processed_time = time_start

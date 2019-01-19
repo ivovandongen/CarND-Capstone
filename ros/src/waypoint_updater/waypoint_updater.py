@@ -6,6 +6,7 @@ from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 from scipy.spatial import KDTree
 import numpy as np
+import time
 
 import math
 
@@ -24,8 +25,13 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 100  # was: 200 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 25 #100  # was: 200 # Number of waypoints we will publish. You can change this number
 MAX_DECEL = .5
+
+INTERVAL_THRESHOLD_MS_POSE = 10
+INTERVAL_THRESHOLD_MS_TRAFFIC = 250
+#STOP_COUNTER_LIMIT_LOW = 1100
+#STOP_COUNTER_LIMIT_HIGH = 1120
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -36,15 +42,19 @@ class WaypointUpdater(object):
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
 
-        self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
+        self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=0)
 
+        self.last_processed_time_pose = -1
+        self.last_processed_time_traffic = -1
+        
         # TODO: Add other member variables you need below
         self.pose = None
         self.base_waypoints = None
         self.waypoints_2d = None
         self.waypoint_tree = None
         self.stopline_wp_idx = -1
-
+#        self.stop_counter = -1
+        
 	# for optimization
         self.prev_pose_x = None
         self.prev_pose_y = None
@@ -54,7 +64,7 @@ class WaypointUpdater(object):
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(30) # was: 50
+        rate = rospy.Rate(20) # was: 50
         while not rospy.is_shutdown():
             if self.pose and self.base_waypoints and self.waypoint_tree:
                 self.publish_waypoints()
@@ -102,8 +112,19 @@ class WaypointUpdater(object):
         farthest_idx = closest_idx + LOOKAHEAD_WPS
         base_waypoints = self.base_waypoints.waypoints[closest_idx:farthest_idx]
         
+#        self.stop_counter = self.stop_counter + 1
+#        rospy.loginfo(self.stop_counter)        
         if self.stopline_wp_idx == -1 or self.stopline_wp_idx >= farthest_idx:
             lane.waypoints = base_waypoints
+#            if self.stop_counter < STOP_COUNTER_LIMIT_LOW:
+#                lane.waypoints = base_waypoints
+#                rospy.logerr(self.stop_counter)
+#            if self.stop_counter <= STOP_COUNTER_LIMIT_HIGH and self.stop_counter >= STOP_COUNTER_LIMIT_LOW:
+#                lane.waypoints = self.decelerate_waypoints(base_waypoints, closest_idx)
+#                rospy.logerr("I'm braking for the sake of simulator stability")
+#            if self.stop_counter > STOP_COUNTER_LIMIT_HIGH:
+#                self.stop_counter = 0
+#                rospy.logerr("release .... .......... ..................")
         else:
             rospy.logerr("I'm in this hell")
             lane.waypoints = self.decelerate_waypoints(base_waypoints, closest_idx)
@@ -113,7 +134,6 @@ class WaypointUpdater(object):
         self.prev_pose_x = self.pose.pose.position.x
         self.prev_pose_y = self.pose.pose.position.y
         self.prev_stopline_wp_idx = self.stopline_wp_idx
-        
         return lane
 
     def decelerate_waypoints(self, waypoints, closest_idx):
@@ -131,6 +151,13 @@ class WaypointUpdater(object):
         return temp
 
     def pose_cb(self, msg):
+        rospy.loginfo("Hello!!!!!")
+
+        time_start_pose = time.time()
+        if self.last_processed_time_pose > 0 and (time_start_pose - self.last_processed_time_pose) * 1000 < INTERVAL_THRESHOLD_MS_POSE:
+            rospy.loginfo("Skipping pose msg waypoint_updater")
+            return
+        self.last_processed_time_pose = time_start_pose
         self.pose = msg
 
     def waypoints_cb(self, waypoints):
@@ -142,6 +169,13 @@ class WaypointUpdater(object):
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
+        time_start_traffic = time.time()
+        if self.last_processed_time_traffic > 0 and (time_start_traffic - self.last_processed_time_traffic) * 1000 < INTERVAL_THRESHOLD_MS_TRAFFIC:
+            rospy.loginfo("Skipping traffic msg waypoint_updater")
+            return
+
+        self.last_processed_time_traffic = time_start_traffic
+        
         rospy.loginfo("Traffic light: %s", msg)
         self.stopline_wp_idx = msg.data
 
