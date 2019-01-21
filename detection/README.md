@@ -49,10 +49,19 @@ On some machines, you need to make sure you have the right kernel modules are lo
 
 - source setup.bash
 - ./prepare_data.sh
-- ./train_simulator.sh
-- ./export_graph_simulator.sh
-- ./test_simulator.sh
+
+1. For simulator
+    - ./train_simulator.sh
+    - ./export_graph_simulator.sh
+    - ./test_simulator.sh
+2. For carla
+    - ./train_carla.sh
+    - ./export_graph_carla.sh
+    - ./test_carla.sh
 
 ## References:
 - [Tensorflow Object Detection](https://github.com/tensorflow/models/tree/0375c800c767db2ef070cee1529d8a50f42d1042/object_detection)
 - [Traffic Light Detection Using the TensorFlow* Object Detection API](https://software.intel.com/en-us/articles/traffic-light-detection-using-the-tensorflow-object-detection-api)
+- [Self-Driving Cars: Implementing Real-Time Traffic Light Detection and Classification in 2017](https://medium.com/@anthony_sarkis/self-driving-cars-implementing-real-time-traffic-light-detection-and-classification-in-2017-7d9ae8df1c58) - Example dataset
+- [labelImg](https://github.com/tzutalin/labelImg)
+- [Sloth](https://sloth.readthedocs.io/en/latest/)
