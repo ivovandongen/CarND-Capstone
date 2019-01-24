@@ -107,8 +107,8 @@ namespace waypoint_follower {
 	  }
 
           // polyfit predictions for error estimation
-          AD<double> f0 = this->coeffs[0] + this->coeffs[1] * x0 + this->coeffs[2] * CppAD::pow(x0,2) + this->coeffs[3] * CppAD::pow(x0,3);
-          AD<double> psi_des0 = CppAD::atan(this->coeffs[1] + 2*this->coeffs[2]*x0 + 3*this->coeffs[3]*CppAD::pow(x0,2));
+          AD<double> f0 = this->coeffs[0] + this->coeffs[1] * x0 + this->coeffs[2] * CppAD::pow(x0,2);
+          AD<double> psi_des0 = CppAD::atan(this->coeffs[1] + 2*this->coeffs[2]*x0);
           // Constraints
           fg[1 + t] = x1 - (x0 + v0*CppAD::cos(psi0)*dt);
           fg[1 + y_offset + t] = y1 - (y0 + v0*CppAD::sin(psi0)*dt);
@@ -286,7 +286,7 @@ namespace waypoint_follower {
     }  
 
     // estimating polynomial fit, ego vehicles' cte, etc.
-    Eigen::VectorXd coeffs = Polyfit(waypoints_x, waypoints_y, 3);
+    Eigen::VectorXd coeffs = Polyfit(waypoints_x, waypoints_y, 2);
     double cte = Polyeval(coeffs, 0);
     double epsi = atan(coeffs[1]);
     double max_speed = current_waypoints_.getWaypointVelocityMPS(0);
