@@ -124,6 +124,7 @@ class DBWNode
       bcmd.pedal_cmd_type = dbw_mkz_msgs::BrakeCmd::CMD_TORQUE;
       bcmd.pedal_cmd = brake;
       this->brake_pub.publish(bcmd);
+
       // dbw_enabled = false;
     }
 };

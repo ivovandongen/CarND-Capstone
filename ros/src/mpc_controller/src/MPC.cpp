@@ -6,6 +6,8 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "styx_msgs/Lane.h"
+#include "tf/transform_datatypes.h"
+#include "tf/LinearMath/Matrix3x3.h"
 
 namespace waypoint_follower {
   
@@ -17,18 +19,18 @@ namespace waypoint_follower {
       double Lf;
       double max_speed;
       
-      size_t N;
+      int N;
       double dt;
-      size_t y_offset;
-      size_t psi_offset;
-      size_t v_offset;
-      size_t cte_offset;
-      size_t epsi_offset;
-      size_t delta_offset;
-      size_t a_offset;
+      int y_offset;
+      int psi_offset;
+      int v_offset;
+      int cte_offset;
+      int epsi_offset;
+      int delta_offset;
+      int a_offset;
       // Cost coefficients
       // const double cost_weights[6] = {1.7, 200, 0.01, 0.001, 0.005, 0.0008};
-      const double cost_weights[6] = {1, 100, 0.01, 0.000, 0.000, 0.000};
+      const double cost_weights[6] = {1, 150, 0.004, 0.001, 0.005, 0.000};
     public:
       // Fitted polynomial coefficients 
       Eigen::VectorXd coeffs;
@@ -58,18 +60,18 @@ namespace waypoint_follower {
         
         fg[0] = 0;
         // estimating cost 
-        for (size_t t = 0; t < N; t++){
+        for (int t = 0; t < N; t++){
           fg[0] += cost_weights[0] * CppAD::pow(vars[cte_offset + t], 2); 
           fg[0] += cost_weights[1] * CppAD::pow(vars[epsi_offset + t], 2);
           fg[0] += cost_weights[2] * CppAD::pow(vars[v_offset + t] - max_speed, 2);
         }
         // acceleration term (based on actuators)
-        for (size_t t = 0; t < N - 1; t++){
+        for (int t = 0; t < N - 1; t++){
           fg[0] += cost_weights[3] * CppAD::pow(vars[a_offset + t], 2);
           fg[0] += cost_weights[4] * CppAD::pow(CppAD::pow(vars[v_offset + t], 2) * vars[delta_offset + t] / Lf, 2); // centripetal 
         }
         // jerk term
-        for (size_t t = 0; t < N - 2; t++){
+        for (int t = 0; t < N - 2; t++){
           AD<double> tang_jerk = (vars[a_offset + t + 1] - vars[a_offset + t]) / dt;
           AD<double> cp_jerk = (vars[delta_offset + t + 1] - vars[delta_offset + t]) * CppAD::pow(vars[v_offset + t],2) / Lf / dt;
           fg[0] += cost_weights[5] * (CppAD::pow(tang_jerk, 2) + CppAD::pow(cp_jerk, 2));
@@ -80,7 +82,7 @@ namespace waypoint_follower {
         fg[1 + v_offset] = vars[v_offset];
         fg[1 + cte_offset] = vars[cte_offset];
         fg[1 + epsi_offset] = vars[epsi_offset];
-        for (size_t t = 1; t < N; t++){
+        for (int t = 1; t < N; t++){
           // state at time t-1
           AD<double> x0 = vars[t - 1];
           AD<double> y0 = vars[y_offset + t - 1];
@@ -98,17 +100,22 @@ namespace waypoint_follower {
           // actuators state at time 
           AD<double> delta = vars[delta_offset + t - 1];
           AD<double> a = vars[a_offset + t - 1];
+	  if (t > 1)
+	  {
+	    delta = vars[delta_offset + t - 2];
+	    a = vars[a_offset + t - 2];
+	  }
 
           // polyfit predictions for error estimation
-          AD<double> f0 = this->coeffs[0] + this->coeffs[1] * x0 + this->coeffs[2] * pow(x0,2);
-          AD<double> psi_des0 = CppAD::atan(this->coeffs[1] + 2*this->coeffs[2]*x0);
+          AD<double> f0 = this->coeffs[0] + this->coeffs[1] * x0 + this->coeffs[2] * CppAD::pow(x0,2) + this->coeffs[3] * CppAD::pow(x0,3);
+          AD<double> psi_des0 = CppAD::atan(this->coeffs[1] + 2*this->coeffs[2]*x0 + 3*this->coeffs[3]*CppAD::pow(x0,2));
           // Constraints
-          fg[1 + t] = x1 - x0 - v0*CppAD::cos(psi0)*dt;
-          fg[1 + y_offset + t] = y1 - y0 - v0*CppAD::sin(psi0)*dt;
-          fg[1 + psi_offset + t] = psi1 - psi0 - v0*delta/Lf*dt;
-          fg[1 + v_offset + t] = v1 - v0 - a*dt;
-          fg[1 + cte_offset + t] = cte1 + f0 - y0 - v0*CppAD::sin(epsi0)*dt;
-          fg[1 + epsi_offset + t] = epsi1 + psi_des0 - psi0 - v0 * delta / Lf * dt;
+          fg[1 + t] = x1 - (x0 + v0*CppAD::cos(psi0)*dt);
+          fg[1 + y_offset + t] = y1 - (y0 + v0*CppAD::sin(psi0)*dt);
+          fg[1 + psi_offset + t] = psi1 - (psi0 + v0*delta/Lf*dt);
+          fg[1 + v_offset + t] = v1 - (v0 + a*dt);
+          fg[1 + cte_offset + t] = cte1 - ((f0 - y0) - v0*CppAD::sin(epsi0)*dt);
+          fg[1 + epsi_offset + t] = epsi1 - ((psi_des0 - psi0) - v0 * delta / Lf * dt);
         }
       }
   };
@@ -142,12 +149,12 @@ namespace waypoint_follower {
     }
     return result;
   }
-  
+
   int MPC::getReferenceWaypoint()
   {
     int path_size = static_cast<int>(current_waypoints_.getSize());
     double v = std::sqrt(current_velocity_.twist.linear.x * current_velocity_.twist.linear.x + current_velocity_.twist.linear.y * current_velocity_.twist.linear.y);
-    double lookahead_distance = std::max(80.0, std::min(v * 8.0, 200.0));
+    double lookahead_distance = std::max(40.0, std::min(v * 4.0, 100.0));
     // if waypoints are not given, do nothing.
     if (path_size == 0)
       return -1;
@@ -256,9 +263,17 @@ namespace waypoint_follower {
     {
       return {steer_, accel_};
     }
+    int y_offset = ref_no_;
+    int v_offset = ref_no_*3;
     int delta_offset = ref_no_*6;
     int a_offset = ref_no_*7 - 1;
-    
+
+    // translate orientation quaternion to Euler
+    double pitch, roll, yaw;
+    tf::Quaternion quat;
+    tf::quaternionMsgToTF(current_pose_.pose.orientation, quat);
+    tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+
     // translate waypoints to ego vehicle coordinate system
     Eigen::VectorXd waypoints_x(ref_waypoint);
     Eigen::VectorXd waypoints_y(ref_waypoint);
@@ -266,16 +281,14 @@ namespace waypoint_follower {
       geometry_msgs::Point p = current_waypoints_.getWaypointPosition(i);
       double dx = p.x - current_pose_.pose.position.x;
       double dy = p.y - current_pose_.pose.position.y;
-      double psi = current_pose_.pose.orientation.z;
-      waypoints_x[i] = dx * std::cos(psi) - dy * std::sin(psi);
-      waypoints_y[i] = dx * std::sin(psi) + dy * std::cos(psi);
+      waypoints_x[i] = dx * std::cos(-yaw) - dy * std::sin(-yaw);
+      waypoints_y[i] = dx * std::sin(-yaw) + dy * std::cos(-yaw);
     }  
 
     // estimating polynomial fit, ego vehicles' cte, etc.
-    Eigen::VectorXd coeffs = Polyfit(waypoints_x, waypoints_y, 2);
+    Eigen::VectorXd coeffs = Polyfit(waypoints_x, waypoints_y, 3);
     double cte = Polyeval(coeffs, 0);
     double epsi = atan(coeffs[1]);
-    ROS_ERROR_STREAM("cte " << cte << "; epsi " << epsi);
     double max_speed = current_waypoints_.getWaypointVelocityMPS(0);
     
     // current state
@@ -307,6 +320,11 @@ namespace waypoint_follower {
     for (i = 0; i < n_vars; i++){
       vars_lowerbound[i] = -1E19;
       vars_upperbound[i] = 1E19;
+    }
+    // no reverse driving in the capstone project
+    for (i = v_offset; i < v_offset + ref_no_; i++)
+    {
+      vars_lowerbound[i] = 0;
     }
 
     for (i = delta_offset; i < a_offset; i++){
@@ -343,11 +361,12 @@ namespace waypoint_follower {
     // can uncomment 1 of these and see if it makes a difference or not but
     // if you uncomment both the computation time should go up in orders of
     // magnitude.
-    options += "Sparse  true        forward\n";
-    options += "Sparse  true        reverse\n";
+    // options += "Sparse  true        forward\n";
+    // options += "Sparse  true        reverse\n";
     // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
     // Change this as you see fit.
     options += "Numeric max_cpu_time          0.5\n";
+    options += "Integer max_iter 	3000\n";
     
     // place to return solution
     CppAD::ipopt::solve_result<Dvector> solution;
@@ -362,8 +381,6 @@ namespace waypoint_follower {
     accel_ = solution.x[a_offset];
     steer_ = solution.x[delta_offset];
     updated_ = false;
-    ROS_ERROR_STREAM ("steer sln: " << steer_ << "; accel sln: " << accel_);
-    ROS_ERROR_STREAM (" ================== cost " << solution.obj_value << " ================================== ");
     return {steer_, accel_};
-  }
+}
 }

@@ -39,8 +39,8 @@ class MPC {
   
   public:
       MPC()
-    : ref_no_(20)
-    , dt_(0.05)
+    : ref_no_(15)
+    , dt_(0.10)
     , state_no_(6)
     , act_no_(2)
     , accel_(0.0)
@@ -57,8 +57,8 @@ class MPC {
     }
   
     MPC(double max_accel, double max_decel, double wheel_base, double max_steer_angle)
-    : ref_no_(20)
-    , dt_(0.05)
+    : ref_no_(15)
+    , dt_(0.10)
     , state_no_(6)
     , act_no_(2)
     , accel_(0.0)
