@@ -50,11 +50,12 @@ To set up port forwarding, please refer to the [instructions from term 2](https:
 git clone https://github.com/udacity/CarND-Capstone.git
 ```
 
-2. Install python dependencies
+2. Install dependencies
 ```bash
 cd CarND-Capstone
 pip install -r requirements.txt
 ```
+Install Ipopt and CppAD: please refer to install\_Ipopt\_CppAD.md for installation.
 3. Make and run styx
 ```bash
 cd ros

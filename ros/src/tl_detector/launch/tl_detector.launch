@@ -3,5 +3,5 @@
     <!--Traffic Light tf model -->
     <param name="traffic_light_model" value="$(find tl_detector)/sim_model.pb" />
 
-    <node pkg="tl_detector" type="tl_detector.py" name="tl_detector" output="screen" cwd="node"/>
+    <node pkg="tl_detector" type="tl_detector.py" name="tl_detector" output="log" cwd="node"/>
 </launch>

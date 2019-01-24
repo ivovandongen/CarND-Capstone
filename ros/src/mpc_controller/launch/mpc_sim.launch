@@ -1,0 +1,7 @@
+<launch>
+
+	<!-- rosrun mpc_controller dbw_node -->
+	<node pkg="mpc_controller" type="dbw_node" name="dbw_node" output="log"/>
+
+</launch>
+
