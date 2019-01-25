@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(mpc_controller)
+project(dbw_node)
 
 ## Add support for C++11, supported in ROS Kinetic and newer
 # add_definitions(-std=c++11)
@@ -74,12 +74,6 @@ find_package(catkin REQUIRED COMPONENTS
 ## catkin specific configuration ##
 ###################################
 catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES MPC
-  CATKIN_DEPENDS roscpp std_msgs geometry_msgs styx_msgs
-)
-
-catkin_package(
   CATKIN_DEPENDS roscpp std_msgs geometry_msgs styx_msgs
 )
 
@@ -89,17 +83,13 @@ catkin_package(
 
 SET(CMAKE_CXX_FLAGS "-std=c++11 -O2 -g -Wall ${CMAKE_CXX_FLAGS}")
 include_directories( 
-  /usr/local/include/coin # for Ipopt
   include
   ${catkin_INCLUDE_DIRS}
 )
 link_directories(/usr/local/lib)
 
-add_library(libwaypoint_follower lib/libwaypoint_follower.cpp)
-add_dependencies(libwaypoint_follower styx_msgs_generate_messages_cpp)
-
-add_executable(MPC src/MPC.cpp)
-add_dependencies(MPC libwaypoint_follower styx_msgs_generate_messages_cpp)
-target_link_libraries(MPC ipopt libwaypoint_follower ${catkin_LIBRARIES})
+add_executable(dbw_node dbw_node.cpp)
+add_dependencies(dbw_node styx_msgs_generate_messages_cpp)
+target_link_libraries(dbw_node ${catkin_LIBRARIES})
 
 

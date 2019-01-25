@@ -1,11 +1,13 @@
-#include "MPC.h"
+#include "ros/ros.h"
 #include "dbw_mkz_msgs/ThrottleCmd.h"
 #include "dbw_mkz_msgs/SteeringCmd.h"
 #include "dbw_mkz_msgs/BrakeCmd.h"
 #include "std_msgs/Bool.h"
+#include "std_msgs/Float64.h"
+
 using namespace std;
 
-constexpr int LOOP_RATE = 30; //processing frequency, was: 30
+constexpr int LOOP_RATE = 50; 
 constexpr double MAX_THROTTLE = 0.4;
 
 class DBWNode
@@ -13,16 +15,14 @@ class DBWNode
   private: 
     ros::NodeHandle nh;
   
-    ros::Subscriber waypoint_sub;
-    ros::Subscriber pose_sub;
-    ros::Subscriber velocity_sub;
     ros::Subscriber dbw_enabled_sub;
+    ros::Subscriber steering_sub;
+    ros::Subscriber acceleration_sub;
       
     ros::Publisher steer_pub;
     ros::Publisher throttle_pub;
     ros::Publisher brake_pub;
     
-    waypoint_follower::MPC mpc_controller;
     bool dbw_enabled;
 
     double vehicle_mass; 
@@ -35,6 +35,9 @@ class DBWNode
     double steer_ratio;
     double max_lat_accel; 
     double max_steer_angle;
+
+    double steer_wheel_angle;
+    double acceleration;
   
   public:
 
@@ -42,6 +45,8 @@ class DBWNode
     DBWNode()
     {
       this->dbw_enabled = false;
+      this->steer_wheel_angle = 0.0;
+      this->acceleration = 0.0;
       // reading parameters
       nh.param<double>("vehicle_mass", this->vehicle_mass, 1736.35);
       nh.param<double>("fuel_capacity", this->fuel_capacity,  13.5);
@@ -53,8 +58,7 @@ class DBWNode
       nh.param<double>("steer_ratio", this->steer_ratio, 14.8);
       nh.param<double>("max_lat_accel", this->max_lat_accel, 3.0);
       nh.param<double>("max_steer_angle", this->max_steer_angle, 8.);
-      double max_steer = this->max_steer_angle / this->steer_ratio;
-      mpc_controller = waypoint_follower::MPC(this->accel_limit*MAX_THROTTLE, this->decel_limit, this->wheel_base, max_steer);
+
       ROS_INFO("set publisher...");
       // publish topic
       steer_pub = nh.advertise<dbw_mkz_msgs::SteeringCmd>("/vehicle/steering_cmd", 1);
@@ -63,19 +67,25 @@ class DBWNode
       
       ROS_INFO("set subscriber...");
       // subscribe topic
-      waypoint_sub =
-          nh.subscribe("final_waypoints", 1, &waypoint_follower::MPC::callbackFromWayPoints, &this->mpc_controller);
-      pose_sub =
-          nh.subscribe("current_pose", 1, &waypoint_follower::MPC::callbackFromCurrentPose, &this->mpc_controller);
-      velocity_sub =
-          nh.subscribe("current_velocity", 1, &waypoint_follower::MPC::callbackFromCurrentVelocity, &this->mpc_controller);
-      dbw_enabled_sub = 
+      steering_sub =
+          nh.subscribe("mpc_controller/steering_angle", 1, &DBWNode::callbackFromMPCSteering, this);
+      acceleration_sub =
+          nh.subscribe("mpc_controller/acceleration", 1, &DBWNode::callbackFromMPCAcceleration, this);
+      dbw_enabled_sub =
           nh.subscribe("/vehicle/dbw_enabled", 1, &DBWNode::callbackFromDBWControl, this);
-       
-      ROS_INFO("mpc controller start");
     }
     
-    void callbackFromDBWControl(std_msgs::Bool::Ptr msg)
+    void callbackFromMPCSteering(const std_msgs::Float64::Ptr msg)
+    {
+      this->steer_wheel_angle = (*msg).data * this->steer_ratio;
+    }
+    
+    void callbackFromMPCAcceleration(const std_msgs::Float64::Ptr msg)
+    {
+      this->acceleration = (*msg).data;
+    }
+
+    void callbackFromDBWControl(const std_msgs::Bool::Ptr msg)
     {
       this->dbw_enabled = (*msg).data;
     }
@@ -83,31 +93,27 @@ class DBWNode
     void publish_cmds()
     {
       double throttle = 0.0;
-      double accel = 0.0;
       double steer = 0.0;
       double brake = 0.0;
       if (dbw_enabled){
-      	vector<double> mpc_result = mpc_controller.Solve();
-      	steer = mpc_result[0] * this->steer_ratio;
-      	accel = mpc_result[1];
       	brake = 0;
               
-        if (fabs(accel) <= 0.1)
+        if (fabs(this->acceleration) <= 0.1)
         {
           throttle = .0;
           brake = 400;
         }
-        else if (accel < .0)
+        else if (this->acceleration < .0)
         {
           throttle = .0;
-          brake = abs(accel) * this->vehicle_mass * this->wheel_radius;
+          brake = abs(this->acceleration) * this->vehicle_mass * this->wheel_radius;
         }
         else 
         {
-          throttle = accel / this->accel_limit;
+          throttle = this->acceleration / this->accel_limit;
         }
+	steer = this->steer_wheel_angle;
       }
-      // ROS_ERROR_STREAM("Throttle " << throttle << "; steering " << steer << "; brake " << brake);
       dbw_mkz_msgs::ThrottleCmd tcmd = dbw_mkz_msgs::ThrottleCmd();
       tcmd.enable = true;
       tcmd.pedal_cmd_type = dbw_mkz_msgs::ThrottleCmd::CMD_PERCENT;
@@ -124,8 +130,6 @@ class DBWNode
       bcmd.pedal_cmd_type = dbw_mkz_msgs::BrakeCmd::CMD_TORQUE;
       bcmd.pedal_cmd = brake;
       this->brake_pub.publish(bcmd);
-
-      // dbw_enabled = false;
     }
 };
 

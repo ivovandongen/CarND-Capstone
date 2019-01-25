@@ -1,0 +1,7 @@
+<launch>
+
+	<!-- rosrun dbw_node dbw_node -->
+	<node pkg="dbw_node" type="dbw_node" name="dbw_node" output="log"/>
+
+</launch>
+

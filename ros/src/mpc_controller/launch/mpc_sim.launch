@@ -1,7 +1,8 @@
 <launch>
 
-	<!-- rosrun mpc_controller dbw_node -->
-	<node pkg="mpc_controller" type="dbw_node" name="dbw_node" output="log"/>
+	<!-- rosrun mpc_controller mpc_controller -->
+	<node pkg="mpc_controller" type="MPC" name="mpc_controller" output="log"/>
+
 
 </launch>
 

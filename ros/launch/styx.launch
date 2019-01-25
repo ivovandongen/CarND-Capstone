@@ -6,6 +6,9 @@
     <!--MPC Node -->
     <include file="$(find mpc_controller)/launch/mpc_sim.launch"/>
 
+    <!--DBW Node -->
+    <include file="$(find dbw_node)/launch/dbw_node.launch"/>
+
     <!--Waypoint Loader -->
     <include file="$(find waypoint_loader)/launch/waypoint_loader.launch"/>
 

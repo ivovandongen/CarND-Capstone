@@ -8,6 +8,11 @@
 #include "styx_msgs/Lane.h"
 #include "tf/transform_datatypes.h"
 #include "tf/LinearMath/Matrix3x3.h"
+#include "std_msgs/Float64.h"
+#include "std_msgs/Bool.h"
+
+constexpr int LOOP_RATE = 30; 
+constexpr double MAX_THROTTLE = 0.4;
 
 namespace waypoint_follower {
   
@@ -30,11 +35,10 @@ namespace waypoint_follower {
       int a_offset;
       // Cost coefficients
       // const double cost_weights[6] = {1.7, 200, 0.01, 0.001, 0.005, 0.0008};
-      const double cost_weights[6] = {1, 150, 0.004, 0.001, 0.005, 0.000};
-    public:
+      const double cost_weights[6] = {1, 300, 0.004, 0.001, 0.01, 0.01};
+    public
       // Fitted polynomial coefficients 
       Eigen::VectorXd coeffs;
-      Eigen::VectorXd coeffs_vel;
       FG_eval(Eigen::VectorXd coeffs, int N, double dt, double max_accel, double max_decel, double wheel_base, double max_speed) { 
         this->coeffs = coeffs;
         
@@ -98,13 +102,8 @@ namespace waypoint_follower {
           AD<double> cte1 = vars[cte_offset + t];
           AD<double> epsi1 = vars[epsi_offset + t];
           // actuators state at time 
-          AD<double> delta = vars[delta_offset + t - 1];
-          AD<double> a = vars[a_offset + t - 1];
-	  if (t > 1)
-	  {
-	    delta = vars[delta_offset + t - 2];
-	    a = vars[a_offset + t - 2];
-	  }
+          AD<double> delta = vars[delta_offset + std::max(t - 3, 0)];
+          AD<double> a = vars[a_offset + std::max(t - 3, 0)];
 
           // polyfit predictions for error estimation
           AD<double> f0 = this->coeffs[0] + this->coeffs[1] * x0 + this->coeffs[2] * CppAD::pow(x0,2);
@@ -189,15 +188,15 @@ namespace waypoint_follower {
       current_pose_.header = msg->header;
       current_pose_.pose = msg->pose;
       if (fabs(prev_x - current_pose_.pose.position.x) > 0.1 || fabs(prev_y - current_pose_.pose.position.y) > 0.1)
-        updated_ = true;
+        this->Solve();
     }
     else
     {
       current_pose_.header = msg->header;
       current_pose_.pose = msg->pose;
-      updated_ = true;
+      pose_set_ = true;
+      this->Solve();
     }
-    pose_set_ = true; 
   }
 
   void MPC::callbackFromCurrentVelocity(const geometry_msgs::TwistStampedConstPtr &msg)
@@ -208,15 +207,22 @@ namespace waypoint_follower {
       double prev_vy = current_velocity_.twist.linear.y;
       current_velocity_ = *msg;
       if (std::fabs(prev_vx - current_velocity_.twist.linear.x) > 0.1 || std::fabs(prev_vy - current_velocity_.twist.linear.y) > 0.1)
-        updated_ = true;
+        this->Solve();
     }
     else
     {
       current_velocity_ = *msg;
-      updated_ = true;
+      velocity_set_ = true;
+      this->Solve();
     }
-
-    velocity_set_ = true;
+  }
+  
+  void MPC::callbackFromDBWControl(const std_msgs::Bool::Ptr msg)
+  {
+    bool prev_status = this->dbw_enabled_;
+    this->dbw_enabled_ = (*msg).data;
+    if (!prev_status && this->dbw_enabled_)
+      this->Solve();
   }
 
   void MPC::callbackFromWayPoints(const styx_msgs::LaneConstPtr &msg)
@@ -228,42 +234,46 @@ namespace waypoint_follower {
       current_waypoints_.setPath(*msg);
       if (fabs(prev_x - current_waypoints_.getWaypointPosition(0).x) > 0.1 || fabs(prev_y - current_waypoints_.getWaypointPosition(0).y) > 0.1 
          || fabs(prev_v - current_waypoints_.getWaypointVelocityMPS(0)) > 0.1)
-        updated_ = true;
+        this->Solve();
     }
     else 
     {
       current_waypoints_.setPath(*msg);
-      updated_ = true;
+      waypoint_set_ = true;
+      this->Solve();
     }
-    
-    waypoint_set_ = true;
-    // ROS_INFO_STREAM("waypoint subscribed");
   }
 
-  std::vector<double> MPC::Solve() {
+  void MPC::Solve() {
+    if(!dbw_enabled_)
+    {
+      steer_ = 0.0;
+      accel_ = 0.0;
+      return;
+    }
     if(!pose_set_ || !waypoint_set_ || !velocity_set_){
       if(!pose_set_) {
         ROS_WARN("position is missing");
-       }
-       if(!waypoint_set_) {
-         ROS_WARN("waypoint is missing");
-       }
-       if(!velocity_set_) {
-         ROS_WARN("velocity is missing");
-       }
-      return {0, 0};
+      }
+      if(!waypoint_set_) {
+        ROS_WARN("waypoint is missing");
+      }
+      if(!velocity_set_) {
+        ROS_WARN("velocity is missing");
+      }
+      steer_ = 0.0;
+      accel_ = 0.0;
+      return;
     }
     int ref_waypoint = getReferenceWaypoint();
     if (ref_waypoint == -1)
     {
       ROS_WARN("lost next waypoint");
-      return {0, 0};
+      steer_ = 0.0;
+      accel_ = 0.0;
+      return;
     }
-    if (!updated_) // only if neither of pose, waypoints nor velocity changed / updated
-    {
-      return {steer_, accel_};
-    }
-    int y_offset = ref_no_;
+
     int v_offset = ref_no_*3;
     int delta_offset = ref_no_*6;
     int a_offset = ref_no_*7 - 1;
@@ -361,8 +371,8 @@ namespace waypoint_follower {
     // can uncomment 1 of these and see if it makes a difference or not but
     // if you uncomment both the computation time should go up in orders of
     // magnitude.
-    // options += "Sparse  true        forward\n";
-    // options += "Sparse  true        reverse\n";
+    options += "Sparse  true        forward\n";
+    options += "Sparse  true        reverse\n";
     // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
     // Change this as you see fit.
     options += "Numeric max_cpu_time          0.5\n";
@@ -378,9 +388,52 @@ namespace waypoint_follower {
     // Check some of the solution values
     ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
-    accel_ = solution.x[a_offset];
-    steer_ = solution.x[delta_offset];
-    updated_ = false;
-    return {steer_, accel_};
+    this->accel_ = solution.x[a_offset];
+    this->steer_ = solution.x[delta_offset];
+  }
 }
+
+int main(int argc, char **argv)
+{
+  ros::init(argc, argv, "mpc_controller");
+  ros::NodeHandle nh;
+  // Reading important parameters
+  double decel_limit, accel_limit, wheel_base, steer_ratio, max_steer_angle;
+  nh.param<double>("decel_limit", decel_limit, -5.0);
+  nh.param<double>("accel_limit", accel_limit, 1.0);
+  nh.param<double>("wheel_base", wheel_base, 2.8498);
+  nh.param<double>("steer_ratio", steer_ratio, 14.8);
+  nh.param<double>("max_steer_angle", max_steer_angle, 8.);
+  waypoint_follower::MPC mpc_controller = waypoint_follower::MPC(accel_limit * MAX_THROTTLE, decel_limit, wheel_base, max_steer_angle/steer_ratio);
+
+  ROS_INFO("set publisher...");
+  // publish topic
+  ros::Publisher steer_angle_pub = nh.advertise<std_msgs::Float64>("/mpc_controller/steering_angle", 1);
+  ros::Publisher acceleration_pub = nh.advertise<std_msgs::Float64>("/mpc_controller/acceleration", 1);
+
+  ROS_INFO("set subscriber...");
+  // subscribe topic
+  ros::Subscriber waypoint_sub =
+          nh.subscribe("final_waypoints", 1, &waypoint_follower::MPC::callbackFromWayPoints, &mpc_controller);
+  ros::Subscriber pose_sub =
+          nh.subscribe("current_pose", 1, &waypoint_follower::MPC::callbackFromCurrentPose, &mpc_controller);
+  ros::Subscriber velocity_sub =
+          nh.subscribe("current_velocity", 1, &waypoint_follower::MPC::callbackFromCurrentVelocity, &mpc_controller);
+  ros::Subscriber dbw_enabled_sub = 
+          nh.subscribe("/vehicle/dbw_enabled", 1, &waypoint_follower::MPC::callbackFromDBWControl, &mpc_controller);
+  
+  ros::Rate loop_rate(LOOP_RATE);  
+  while (ros::ok())
+  {
+    ros::spinOnce();
+    std_msgs::Float64 steer_msg = std_msgs::Float64();
+    steer_msg.data = mpc_controller.Steer();
+    steer_angle_pub.publish(steer_msg);
+
+    std_msgs::Float64 accel_msg = std_msgs::Float64();
+    accel_msg.data = mpc_controller.Accel();
+    acceleration_pub.publish(accel_msg);
+    loop_rate.sleep();
+  }
+  return 0;
 }
