@@ -1,4 +1,4 @@
-hifndef MPC_H
+#ifndef MPC_H
 #define MPC_H
 
 #include "ros/ros.h"

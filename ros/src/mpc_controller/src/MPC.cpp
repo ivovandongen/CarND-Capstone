@@ -10,8 +10,6 @@
 #include "tf/LinearMath/Matrix3x3.h"
 #include "std_msgs/Float64.h"
 #include "std_msgs/Bool.h"
-#include "mpc_controller/ControlCmd.h"
-#include "mpc_controller/ControlCmdArray.h"
 
 constexpr int LOOP_RATE = 20; // should be in sync with dt_
 constexpr double MAX_THROTTLE = 0.4;
