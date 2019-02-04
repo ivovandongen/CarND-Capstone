@@ -54,7 +54,7 @@ class WaypointUpdater(object):
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(30) # was: 50
+        rate = rospy.Rate(20) # was: 50
         while not rospy.is_shutdown():
             if self.pose and self.base_waypoints and self.waypoint_tree:
                 self.publish_waypoints()
@@ -105,7 +105,6 @@ class WaypointUpdater(object):
         if self.stopline_wp_idx == -1 or self.stopline_wp_idx >= farthest_idx:
             lane.waypoints = base_waypoints
         else:
-            rospy.logerr("I'm in this hell")
             lane.waypoints = self.decelerate_waypoints(base_waypoints, closest_idx)
 
         lane.header = self.base_waypoints.header
@@ -121,10 +120,10 @@ class WaypointUpdater(object):
         for i, wp in enumerate(waypoints):
             p = Waypoint()
             p.pose = wp.pose
-            stop_idx = max(self.stopline_wp_idx - closest_idx - 2, 0)
+            stop_idx = max(self.stopline_wp_idx - closest_idx, 0)
             dist = self.distance(waypoints, i, stop_idx)
-            vel = math.sqrt(2 * MAX_DECEL * dist)
-            if vel < .1:
+            vel = MAX_DECEL * dist
+            if vel < .01:
                 vel = 0.
             p.twist.twist.linear.x = min(vel, p.twist.twist.linear.x)
             temp.append(p)
