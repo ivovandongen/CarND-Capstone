@@ -33,10 +33,12 @@ class MPC {
 
     // obtained from messages
     geometry_msgs::PoseStamped current_pose_;
-    geometry_msgs::TwistStamped current_velocity_;
-    WayPoints current_waypoints_;
-    double speed_iir_;
+    double current_x_;
+    double current_y_;
     double yaw_iir_;
+    geometry_msgs::TwistStamped current_velocity_;
+    double speed_iir_;
+    WayPoints current_waypoints_;
   
     std::vector<double> steer_cmd_;
     std::vector<double> accel_cmd_;;

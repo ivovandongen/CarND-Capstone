@@ -11,7 +11,7 @@
 #include "std_msgs/Float64.h"
 #include "std_msgs/Bool.h"
 
-constexpr int LOOP_RATE = 20; // should be in sync with dt_
+constexpr int LOOP_RATE = 30; // should be in sync with dt_
 constexpr double MAX_THROTTLE = 0.4;
 
 namespace waypoint_follower {
@@ -34,9 +34,9 @@ namespace waypoint_follower {
       int delta_offset;
       int a_offset;
       // Cost coefficients
-      const double cost_weights[3] = {1.0, 300.0, 0.04};
-      const double cost_weights_dot[3] = {0.3, 0.3, 50.0};
-      const double cost_weights_dotdot[2] = {0.05, 0.05};
+      const double cost_weights[3] = {2.0, 50.0, 0.40};
+      const double cost_weights_dot[3] = {1.8, 0.5, 0.0};
+      const double cost_weights_dotdot[2] = {0.3, 0.3};
     public:
       // Fitted polynomial coefficients
       Eigen::VectorXd coeffs;
@@ -91,8 +91,8 @@ namespace waypoint_follower {
 	  AD<double> target_speed = waypoints->getWaypointVelocityMPS(curWaypoint);
           fg[0] += cost_weights[2] * CppAD::pow(vars[v_offset + t] - target_speed, 2);
 	  // punish speed violations
-	  // if (vars[v_offset + t] > target_speed)
-          //  fg[0] += 100;
+	  if (vars[v_offset + t] > target_speed)
+            fg[0] += 1000;
 	  // punish unnecessary stops
 	  // if (vars[v_offset + t] < 0.05 && target_speed > 0.05)
 	  //   fg[0] += 100;
@@ -132,7 +132,7 @@ namespace waypoint_follower {
           AD<double> v1 = vars[v_offset + t];
           AD<double> cte1 = vars[cte_offset + t];
           AD<double> epsi1 = vars[epsi_offset + t];
-          // actuators state at time t-11, i.e. 500ms delay!
+          // actuators state at time t-6, i.e. 500ms delay!
           AD<double> delta = vars[delta_offset + std::max(t - 6, 0)];
           AD<double> a = vars[a_offset + std::max(t - 6, 0)];
 
@@ -233,12 +233,14 @@ namespace waypoint_follower {
   {
     if (pose_set_)
     {
-      double prev_x = current_pose_.pose.position.x;
-      double prev_y = current_pose_.pose.position.y;
+      double prev_x = current_x_;
+      double prev_y = current_y_;
       double prev_qz = current_pose_.pose.orientation.z;
       double prev_qw = current_pose_.pose.orientation.w;
       current_pose_.header = msg->header;
       current_pose_.pose = msg->pose;
+      current_x_ = current_pose_.pose.position.x;
+      current_y_ = current_pose_.pose.position.y;
       // translate orientation quaternion to Euler
       double pitch, roll, yaw;
       tf::Quaternion quat;
@@ -246,7 +248,7 @@ namespace waypoint_follower {
       tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
       yaw_iir_ = IIR(yaw_iir_, yaw, 0.3);
 
-      if (fabs(prev_x - current_pose_.pose.position.x) > 0.01 || fabs(prev_y - current_pose_.pose.position.y) > 0.01 || fabs(prev_qz - current_pose_.pose.orientation.z) >0.01 || fabs(prev_qw - current_pose_.pose.orientation.w) > 0.01)
+      if (fabs(prev_x - current_x_) > 0.01 || fabs(prev_y - current_y_) > 0.01 || fabs(prev_qz - current_pose_.pose.orientation.z) >0.01 || fabs(prev_qw - current_pose_.pose.orientation.w) > 0.01)
         updated_ = true;
         // this->Solve();
     }
@@ -254,6 +256,8 @@ namespace waypoint_follower {
     {
       current_pose_.header = msg->header;
       current_pose_.pose = msg->pose;
+      current_x_ = current_pose_.pose.position.x;
+      current_y_ = current_pose_.pose.position.y;
       // translate orientation quaternion to Euler
       double pitch, roll, yaw;
       tf::Quaternion quat;
@@ -325,7 +329,14 @@ namespace waypoint_follower {
   void MPC::Solve() {
     if(!updated_)
     {
-      return;
+      // use prediction. Typically happens to extreme frame drop in simulator.
+      double dt = (1.0/LOOP_RATE);
+      double delta = GetSteerCmd();
+      double a = GetAccelCmd();
+      current_x_ += speed_iir_ * dt * std::cos(yaw_iir_);
+      current_y_ += speed_iir_ * dt * std::sin(yaw_iir_);
+      yaw_iir_ += speed_iir_ * delta / (wheel_base_ / 2) * dt; 
+      speed_iir_ += a * dt;
     }
     if(!dbw_enabled_)
     {
@@ -358,7 +369,6 @@ namespace waypoint_follower {
       this->accel_ind_ = -1;
       return;
     }
-    ROS_ERROR_STREAM("NEW MPC ITERATION");
 
     int v_offset = ref_no_*3;
     int delta_offset = ref_no_*6;
@@ -369,8 +379,8 @@ namespace waypoint_follower {
     Eigen::VectorXd waypoints_y(ref_waypoint - next_waypoint);
     for (int i = next_waypoint; i < ref_waypoint; i++){
       geometry_msgs::Point p = current_waypoints_.getWaypointPosition(i);
-      double dx = p.x - current_pose_.pose.position.x;
-      double dy = p.y - current_pose_.pose.position.y;
+      double dx = p.x - current_x_;
+      double dy = p.y - current_y_;
       waypoints_x[i - next_waypoint] = dx * std::cos(-yaw_iir_) - dy * std::sin(-yaw_iir_);
       waypoints_y[i - next_waypoint] = dx * std::sin(-yaw_iir_) + dy * std::cos(-yaw_iir_);
     }  
@@ -516,7 +526,6 @@ int main(int argc, char **argv)
   {
     ros::spinOnce();
     mpc_controller.Solve();
-    ROS_ERROR_STREAM("PUBLISHING MPC RESULTS");
     std_msgs::Float64 steer_msg = std_msgs::Float64();
     steer_msg.data = mpc_controller.GetSteerCmd();
     steer_angle_pub.publish(steer_msg);
